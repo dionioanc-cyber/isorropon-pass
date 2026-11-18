@@ -1,5 +1,5 @@
 // Bump the version whenever you change any file below so clients pick it up.
-const CACHE = "gympass-v8";
+const CACHE = "gympass-v9";
 const ASSETS = [
   "./",
   "index.html",

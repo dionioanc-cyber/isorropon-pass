@@ -415,8 +415,21 @@ $("#install-btn").onclick = async () => {
 };
 
 // ---------- boot ----------
+// Gym Pass's old address sends logged-in phones here with their login (#login=), so members don't have
+// to log in again. Only the derived key travels, in the part of the address that never leaves the phone.
+function takeMovedLogin() {
+  const m = location.hash.match(/^#login=([A-Za-z0-9_-]+)$/);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search + "#card");
+  try {
+    const l = JSON.parse(new TextDecoder().decode(unb64u(m[1])));
+    if (!/^[0-9a-f]{32}$/.test(l.id) || typeof l.key !== "string" || typeof l.salt !== "string") return;
+    store.set(LOGIN_KEY, { id: l.id, key: l.key, salt: l.salt, v: l.v, checked: 0 });
+  } catch {}
+}
 window.addEventListener("hashchange", async () => { if (await handleImportLink()) show(store.get(PASS_KEY) ? "card" : "program"); });
 (async function init() {
+  takeMovedLogin();
   renderAll();
   const start = location.hash.slice(1);
   if (await handleImportLink()) show("card");
