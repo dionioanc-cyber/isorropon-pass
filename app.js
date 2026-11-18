@@ -277,6 +277,45 @@ function doneKey(day) {
   return `gympass:done:${monday.toISOString().slice(0, 10)}:${day}`;
 }
 
+// The member's own load for an exercise ("what I actually lift"), kept only on this phone. It never goes
+// to the gym and doesn't change the gym's program. Found by day + exercise name, so it stays when the
+// gym sends an updated program that still has that exercise.
+const MYLOAD_KEY = "gympass:myloads";
+const myLoadKey = (day, name) => (day + "|" + name).normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+function myLoadButton(day, ex) {
+  const key = myLoadKey(day, ex.name);
+  const wrap = document.createElement("div");
+  wrap.className = "my-load";
+  const show = () => {
+    const cur = (store.get(MYLOAD_KEY) || {})[key];
+    wrap.innerHTML = `<button type="button" class="${cur ? "set" : ""}"><span class="k">My load</span><span class="v"></span></button>`;
+    wrap.querySelector(".v").textContent = cur ? cur.load : "+ add";
+    if (cur) wrap.querySelector("button").title = "Changed " + fmt(new Date(cur.at));
+    wrap.querySelector("button").onclick = edit;
+  };
+  const edit = () => {
+    const cur = (store.get(MYLOAD_KEY) || {})[key];
+    wrap.innerHTML = `<input type="text" inputmode="decimal" enterkeyhint="done" maxlength="20" aria-label="My load for ${ex.name.replace(/"/g, "")}" placeholder="${ex.load ? ex.load.replace(/"/g, "") : "e.g. 40 kg"}">`;
+    const input = wrap.querySelector("input");
+    input.value = cur ? cur.load : "";
+    let done = false;
+    const save = () => {
+      if (done) return; done = true;
+      const all = store.get(MYLOAD_KEY) || {}, v = input.value.trim();
+      // a plain number means kilos, like the gym writes it
+      const load = /^\d+([.,]\d+)?$/.test(v) ? v + " kg" : v;
+      if (load) all[key] = { load, at: Date.now() }; else delete all[key];
+      store.set(MYLOAD_KEY, all);
+      show();
+    };
+    input.onkeydown = e => { if (e.key === "Enter") input.blur(); if (e.key === "Escape") { done = true; show(); } };
+    input.onblur = save;
+    input.focus(); input.select();
+  };
+  show();
+  return wrap;
+}
+
 function renderProgram() {
   const p = store.get(PROGRAM_KEY), pass = store.get(PASS_KEY);
   // the program is only shown while the membership is valid; it stays saved for after a renewal
@@ -331,11 +370,12 @@ function renderProgram() {
   day.exercises.forEach((ex, i) => {
     const li = document.createElement("li");
     li.className = "ex" + (done.has(i) ? " done" : "");
-    li.innerHTML = `<input type="checkbox" aria-label="Mark done"><div><div class="name"></div><div class="meta"></div></div>`;
+    li.innerHTML = `<input type="checkbox" aria-label="Mark done"><div class="ex-text"><div class="name"></div><div class="meta"></div></div>`;
     li.querySelector(".name").textContent = ex.name;
     li.querySelector(".meta").textContent =
       [ex.sets && ex.reps ? `${ex.sets} × ${ex.reps}` : ex.sets ? `${ex.sets} sets` : ex.reps, ex.load].filter(Boolean).join(" · ");
-    const cb = li.querySelector("input");
+    li.appendChild(myLoadButton(day.day, ex));
+    const cb = li.querySelector("input[type=checkbox]");
     cb.checked = done.has(i);
     cb.onchange = () => {
       cb.checked ? done.add(i) : done.delete(i);
@@ -394,8 +434,8 @@ document.addEventListener("visibilitychange", () => {
 setInterval(() => { if (document.visibilityState === "visible") refreshPass(); }, 60000);
 $("#login-form").onsubmit = logIn;
 $("#remove-card").onclick = () => {
-  if (!confirm("Remove your membership card and program from this phone?")) return;
-  store.del(PASS_KEY); store.del(PROGRAM_KEY); store.del(LOGIN_KEY);
+  if (!confirm("Remove your membership card, program and your own loads from this phone?")) return;
+  store.del(PASS_KEY); store.del(PROGRAM_KEY); store.del(LOGIN_KEY); store.del(MYLOAD_KEY);
   renderAll(); show("card");
 };
 
